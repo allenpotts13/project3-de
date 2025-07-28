@@ -4,7 +4,7 @@
         "dockerfile": "Dockerfile", 
         "context": ".."
     },
-    
+    "runArgs": ["--add-host=host.docker.internal:host-gateway"],
     "customizations": {
         "vscode": {
             "extensions": [
@@ -23,8 +23,8 @@
                 "python.linting.enabled": true,
                 "python.linting.pylintEnabled": true,
                 "python.formatting.provider": "black",
-                "dbt.profilesDir": "${containerWorkspaceFolder}/dbt/my_dbt_project",
-                "dbt.projectDir": "${containerWorkspaceFolder}/dbt/my_dbt_project"
+                "dbt.profilesDir": "${containerWorkspaceFolder}/dbt/dbt_project",
+                "dbt.projectDir": "${containerWorkspaceFolder}/dbt/dbt_project"
             }
         }
     },
@@ -32,9 +32,7 @@
     "remoteUser": "airflow", 
     "postCreateCommand": "python ${containerWorkspaceFolder}/_devcontainer_setup.py", // Use a separate setup script
     "mounts": [
-
         "source=${localWorkspaceFolder},target=/opt/airflow,type=bind,consistency=cached",
-
         "source=${localWorkspaceFolder}/.env,target=/opt/airflow/.env,type=bind,consistency=cached"
     ]
 }

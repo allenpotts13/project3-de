@@ -208,3 +208,4 @@ __marimo__/
 
 .devcontainer
 /.devcontainer
+_devcontainer_setup.py
