@@ -4,7 +4,8 @@ import time
 import logging
 import configparser
 import sys
-import datetime 
+import datetime
+import shutil
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -56,7 +57,6 @@ def modify_airflow_cfg(section, key, value):
         config.write(configfile)
     logger.info(f"Successfully updated airflow.cfg: [{section}] {key} = {value}")
 
-
 def main():
     logger.info("Starting Dev Container Airflow setup (core configuration only)...")
 
@@ -65,12 +65,14 @@ def main():
     # Adjust permissions (ensure airflow user owns mounted volumes)
     logger.info("Adjusting permissions for mounted volumes...")
     try:
-        run_command(["sudo", "chown", "-R", "airflow:airflow", os.path.join(AIRFLOW_HOME, 'airflow')], check=False)
-        run_command(["sudo", "chmod", "-R", "775", os.path.join(AIRFLOW_HOME, 'airflow')], check=False)
+        run_command(["sudo", "chown", "-R", "airflow:airflow", os.path.join(AIRFLOW_HOME)], check=False)
+        run_command(["sudo", "chmod", "-R", "775", os.path.join(AIRFLOW_HOME)], check=False)
+        
+        run_command(["sudo", "chown", "-R", "airflow:airflow", "/opt/airflow/logs"], check=False)
+        run_command(["sudo", "chmod", "-R", "775", "/opt/airflow/logs"], check=False)
         logger.info("Permissions adjusted.")
     except Exception as e:
         logger.error(f"Failed to adjust permissions: {e}. This might cause issues.")
-
 
     # Set SQLite Metadata DB Connection (or Postgres if configured in .env)
     sql_alchemy_conn = os.getenv('AIRFLOW__DATABASE__SQL_ALCHEMY_CONN')
