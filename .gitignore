@@ -212,6 +212,7 @@ __marimo__/
 **/.devcontainer/
 
 dbt/covid_project/profiles.yml
-
+dbt/covid_project/dbt_project.yml
+dbt/covid_project/models/sources.yml
 
 docker
