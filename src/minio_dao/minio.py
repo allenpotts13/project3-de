@@ -20,7 +20,7 @@ def create_minio_client():
     return minio_client
 
 def extract_data_from_minio(minio_client, file_names):
-    bucket = os.getenv('MINIO_BUCKET_PROJECT3')
+    bucket = os.getenv('MINIO_BUCKET_NAME')
     tmp_dir = tempfile.gettempdir()
 
     file_paths = {}
@@ -29,22 +29,22 @@ def extract_data_from_minio(minio_client, file_names):
         minio_client.fget_object(bucket, file_name, file_path)
 
 # This converts json to jsonl to be read by snowflake
-    if file_name.endswith('.json'):
-        with open(file_path, 'r') as f:
-            data = json.load(f)
+        if file_name.endswith('.json'):
+            with open(file_path, 'r') as f:
+                data = json.load(f)
 
-        jsonl_path = file_path.replace('.json', '.jsonl')
+            jsonl_path = file_path.replace('.json', '.jsonl')
 
-        with open(jsonl_path, 'w') as f:
-            f.write(json.dumps(data) + '\n')
+            with open(jsonl_path, 'w') as f:
+                f.write(json.dumps(data) + '\n')
 
-        file_path = jsonl_path
+            file_path = jsonl_path
 
-    if "canada_antibody" in file_name:
-        file_paths["RAW_CANADA_ANTIBODY_SEROPREVALENCE"] = file_path
-    elif "canada_demand" in file_name:
-        file_paths["RAW_CANADA_DEMAND_AND_USAGE"] = file_path
-    elif "ukhsa-coverage" in file_name:
-        file_paths["RAW_UK_VAX_COVERAGE"] = file_path
+        if "canada_antibody" in file_name:
+            file_paths["RAW_CANADA_ANTIBODY_SEROPREVALENCE"] = file_path
+        elif "canada_demand" in file_name:
+            file_paths["RAW_CANADA_DEMAND_AND_USAGE"] = file_path
+        elif "ukhsa-coverage" in file_name:
+            file_paths["RAW_UK_VAX_COVERAGE"] = file_path
 
     return file_paths
