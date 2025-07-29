@@ -209,5 +209,7 @@ __marimo__/
 .devcontainer
 .devcontainer/
 /.devcontainer
+**/.devcontainer/
+
 
 docker
