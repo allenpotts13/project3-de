@@ -69,7 +69,6 @@ def main():
                 us_covid_data.append(file_dataframe)
                 logging.info(
                     f"Added {len(file_dataframe)} rows from {obj.object_name} to queue")
-                us_covid_data = pd.concat(us_covid_data, ignore_index=True)
             except S3Error as S3e:
                 logging.error(f"Minio error for {obj.object_name}: {S3e}")
             except Exception as e:
