@@ -210,6 +210,13 @@ __marimo__/
 .devcontainer/
 /.devcontainer
 **/.devcontainer/
+# DBT
+my_covid_dbt_project/
+my_covid_dbt_project
+.my_covid_dbt_project/
+.my_covid_dbt_project
+**/my_covid_dbt_project/
+
 
 dbt/covid_project/profiles.yml
 dbt/covid_project/dbt_project.yml
