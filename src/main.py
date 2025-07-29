@@ -11,6 +11,9 @@ import pandas as pd
 from datetime import datetime
 from dotenv import load_dotenv
 
+from minio_dao.minio import create_minio_client, extract_data_from_minio
+from snowflake_dao.snowflake import create_snowflake_connection, create_csv_table_dynamic
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -47,3 +50,17 @@ def setup_logger():
     return logger
 
 logger = setup_logger()
+
+## Calls methods from minio_dao/minio.py to extract .csv from MinIO
+# This stores the .csvs extracted from minio into a /tmp/ directory within the container for Snowflake to pick up and COPY INTO
+filenames = ['ukhsa-coverage-report-2024-05-30.csv', 'canada_antibody_seroprevalence_13100818.csv', 'canada_demand_and_usage_13100838.csv']
+
+minio_client = create_minio_client()
+file_paths = extract_data_from_minio(minio_client, filenames)
+
+snowflake_conn = create_snowflake_connection()
+cursor = snowflake_conn.cursor()
+
+## Calls methods from snowflake_dao/snowflake.py to retrieve files from /tmp/ directories and COPY INTO tables
+# Infers the schema based on the .csv, no need to map columns
+create_csv_table_dynamic(cursor, file_paths)
