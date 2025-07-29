@@ -211,7 +211,7 @@ __marimo__/
 /.devcontainer
 **/.devcontainer/
 
-_devcontainer_setup.py
+dbt/covid_project/profiles.yml
 
 
 docker
