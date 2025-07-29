@@ -7,6 +7,7 @@ from io import BytesIO
 from minio import Minio
 from minio.error import S3Error
 import logging
+import pandas as pd
 
 
 load_dotenv()
