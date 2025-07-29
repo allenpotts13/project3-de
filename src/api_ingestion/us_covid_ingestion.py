@@ -6,6 +6,7 @@ from io import BytesIO
 from minio import Minio
 from minio.error import S3Error
 import logging
+import pandas as pd
 
 
 load_dotenv()
@@ -38,17 +39,27 @@ def fetch_page():
     try:
         response = requests.get(US_COVID_ENDPOINT, params=params)
         response.raise_for_status()
-        covid_data = response.json().get("data", [])
-        return covid_data
+        response_json = response.json()
+        covid_data = response_json.get("data", [])
+        columns_meta = response_json.get("meta", {}).get(
+            "view", {}).get("columns", [])
+        column_names = [col.get("name") for col in columns_meta]
+
+        if not covid_data or not column_names:
+            logging.warning("No data or column names found in response.")
+            return pd.DataFrame()
+
+        covid_dataframe = pd.DataFrame(covid_data, columns=column_names)
+        return covid_dataframe
     except requests.RequestException as e:
         logging.error(f"Error fetching data from API: {e}")
         return []
 
 
-def upload_chunk_to_minio(data):
+def upload_chunk_to_minio(dataframe):
     try:
         # Convert Python data to JSON string and encode it as bytes
-        json_data = json.dumps(data)
+        json_data = dataframe.to_json(orient="records")
         byte_data = BytesIO(json_data.encode('utf-8'))
 
         object_name = f"us_covid_data.json"
@@ -80,12 +91,9 @@ def upload_chunk_to_minio(data):
 
 def main():
     try:
-        data = fetch_page()
-        if not data:
-            logging.warning(f"No data returned.")
-            return
+        covid_dataframe = fetch_page()
 
-        upload_chunk_to_minio(data)
+        upload_chunk_to_minio(covid_dataframe)
         logging.info(f"Successfully upload chunk to MinIO")
 
     except Exception as e:
