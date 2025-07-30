@@ -233,5 +233,13 @@ airflow.db
 **/.airflow.db
 .airflow.db
 
+airflow-webserver.pid
+/.airflow-webserver.pid
+**/.airflow-webserver.pid
+.airflow-webserver.pid
+
+
+
+
 
 
