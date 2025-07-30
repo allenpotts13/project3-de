@@ -1,50 +1,71 @@
-import json
 import os
-import tempfile
 import pandas as pd
-from dotenv import load_dotenv
-from minio import Minio
 from io import BytesIO
+from minio import Minio
+from minio.error import S3Error
+from dotenv import load_dotenv
+import logging
 
-  
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 def create_minio_client():
-    minio_client = Minio(
-    os.getenv('MINIO_EXTERNAL_URL'),
-    access_key = os.getenv('MINIO_ACCESS_KEY'),
-    secret_key = os.getenv('MINIO_SECRET_KEY'),
-    secure = False
+    """Create and return MinIO client"""
+    return Minio(
+        os.getenv('MINIO_EXTERNAL_URL'),
+        access_key=os.getenv('MINIO_ACCESS_KEY'),
+        secret_key=os.getenv('MINIO_SECRET_KEY'),
+        secure=False
     )
 
-    return minio_client
+def normalize_column_names(df):
+    """Normalize DataFrame column names to uppercase with underscores"""
+    df.columns = df.columns.str.upper().str.replace(' ', '_').str.replace('-', '_').str.replace('.', '_')
+    return df
 
-def extract_data_from_minio(minio_client, file_names):
-    bucket = os.getenv('MINIO_BUCKET_NAME')
-    tmp_dir = tempfile.gettempdir()
-
-    file_paths = {}
-    for file_name in file_names:
-        file_path = os.path.join(tmp_dir, file_name)
-        minio_client.fget_object(bucket, file_name, file_path)
-
-# This converts json to jsonl to be read by snowflake
-        if file_name.endswith('.json'):
-            with open(file_path, 'r') as f:
-                data = json.load(f)
-
-            jsonl_path = file_path.replace('.json', '.jsonl')
-
-            with open(jsonl_path, 'w') as f:
-                f.write(json.dumps(data) + '\n')
-
-            file_path = jsonl_path
-
-        if "canada_antibody" in file_name:
-            file_paths["RAW_CANADA_ANTIBODY_SEROPREVALENCE"] = file_path
-        elif "canada_demand" in file_name:
-            file_paths["RAW_CANADA_DEMAND_AND_USAGE"] = file_path
-        elif "ukhsa-coverage" in file_name:
-            file_paths["RAW_UK_VAX_COVERAGE"] = file_path
-
-    return file_paths
+def extract_and_process_csv_from_minio(minio_client, filenames):
+    """
+    Extract CSV files from MinIO and return processed DataFrames
+    
+    Returns:
+        dict: {table_name: processed_dataframe}
+    """
+    bucket_name = os.getenv('MINIO_BUCKET_NAME')
+    processed_data = {}
+    
+    for filename in filenames:
+        try:
+            logger.info(f"Processing CSV file: {filename}")
+            
+            # Get file from MinIO
+            response = minio_client.get_object(bucket_name, filename)
+            
+            # Read CSV into pandas DataFrame
+            df = pd.read_csv(BytesIO(response.read()))
+            
+            # Normalize column names
+            df = normalize_column_names(df)
+            
+            # Add metadata columns
+            df['INGESTION_DATE'] = pd.Timestamp.now()
+            df['FILENAME'] = filename
+            
+            # Create table name from filename (remove extension and sanitize)
+            table_name = filename.replace('.csv', '').upper().replace('-', '_')
+            
+            processed_data[table_name] = df
+            
+            logger.info(f"Processed {filename}: {len(df)} rows, {len(df.columns)} columns")
+            logger.info(f"Columns: {list(df.columns)}")
+            
+            response.close()
+            response.release_conn()
+            
+        except S3Error as e:
+            logger.error(f"MinIO error processing {filename}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error processing {filename}: {e}")
+            raise
+    
+    return processed_data
