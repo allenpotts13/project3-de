@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 # Add src directory to path for imports
 sys.path.append('/workspaces/project3-de/src')
 
-from minio_dao.minio import create_minio_client, extract_data_from_minio
-from snowflake_dao.snowflake import create_snowflake_connection, create_csv_table_dynamic
+from minio_dao.minio import create_minio_client, extract_and_process_csv_from_minio
+from snowflake_dao.snowflake import create_snowflake_connection, upload_dataframes_to_snowflake
 
 # Load environment variables from .env file
 load_dotenv()
@@ -49,26 +49,26 @@ logger = setup_logger()
 
 def process_csv_data():
     """
-    Process legacy CSV data workflow
+    Process CSV data workflow using modern pandas-based approach
     """
     logger.info("Starting CSV data processing workflow...")
     
     try:
-        ## Calls methods from minio_dao/minio.py to extract .csv from MinIO
-        # This stores the .csvs extracted from minio into a /tmp/ directory within the container for Snowflake to pick up and COPY INTO
-        filenames = ['ukhsa-coverage-report-2024-05-30.csv', 'canada_antibody_seroprevalence_13100818.csv', 'canada_demand_and_usage_13100838.csv']
+        # List of CSV files to process
+        filenames = [
+            'ukhsa-coverage-report-2024-05-30.csv', 
+            'canada_antibody_seroprevalence_13100818.csv', 
+            'canada_demand_and_usage_13100838.csv'
+        ]
 
+        # Extract and process CSV files from MinIO using modern approach
         minio_client = create_minio_client()
-        file_paths = extract_data_from_minio(minio_client, filenames)
-
-        snowflake_conn = create_snowflake_connection()
-        cursor = snowflake_conn.cursor()
-
-        ## Calls methods from snowflake_dao/snowflake.py to retrieve files from /tmp/ directories and COPY INTO tables
-        # Infers the schema based on the .csv, no need to map columns
-        create_csv_table_dynamic(cursor, file_paths)
+        processed_data = extract_and_process_csv_from_minio(minio_client, filenames)
         
-        cursor.close()
+        # Upload processed DataFrames to Snowflake
+        snowflake_conn = create_snowflake_connection()
+        upload_dataframes_to_snowflake(snowflake_conn, processed_data)
+        
         snowflake_conn.close()
         logger.info("CSV data processing completed successfully")
         return True
@@ -165,7 +165,7 @@ def main():
     # Track overall success
     overall_success = True
     
-    # Workflow 1: Process CSV data (legacy workflow)
+    # Workflow 1: Process CSV data (pandas-based approach)
     logger.info("\n--- WORKFLOW 1: CSV Data Processing ---")
     csv_success = process_csv_data()
     if not csv_success:
