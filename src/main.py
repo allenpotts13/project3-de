@@ -113,13 +113,10 @@ def stage_covid_data():
     logger.info("Starting COVID data staging...")
     
     try:
-        # Import and run the COVID staging
-        import subprocess
-        import sys
-        
+        # Run the simplified COVID staging (no SQL dependencies)
         result = subprocess.run([
             sys.executable, 'src/data_staging_v2.py'
-        ], capture_output=True, text=True, cwd='/workspaces/project3-de')
+        ], capture_output=True, text=True, cwd='/workspaces/project3-de', timeout=600)  # 10 minute timeout
         
         if result.returncode == 0:
             logger.info("COVID data staging completed successfully")
@@ -129,6 +126,9 @@ def stage_covid_data():
             logger.error(f"COVID data staging failed: {result.stderr}")
             return False
             
+    except subprocess.TimeoutExpired:
+        logger.error("COVID data staging timed out after 10 minutes")
+        return False
     except Exception as e:
         logger.error(f"Error in COVID data staging: {e}")
         import traceback

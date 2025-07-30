@@ -113,82 +113,65 @@ def process_raw_json_files(minio_client, bucket_name):
     
 def process_flattened_parquet_files(minio_client, bucket_name):
     """
-    Process flattened Parquet files from MinIO and return DataFrame for flattened data table
+    Process all flattened Parquet files from MinIO and return DataFrame for flattened data table.
+    No SQL queries - just pulls all files and processes them.
     """
     flattened_data = []
     
-    objects_to_process = minio_client.list_objects(bucket_name, prefix='covid_data_flattened', recursive=True)
+    objects_to_process = list(minio_client.list_objects(bucket_name, prefix='covid_data_flattened', recursive=True))
+    parquet_objects = [obj for obj in objects_to_process if obj.object_name.endswith(".parquet")]
+    total_objects = len(parquet_objects)
+    processed_count = 0
     
-    for obj in objects_to_process:
-        if obj.object_name.endswith(".parquet"):
-            logger.info(f"Processing flattened Parquet file: {obj.object_name}...")
+    logger.info(f"Found {total_objects} parquet files to process")
+    
+    for obj in parquet_objects:
+        file_name = obj.object_name
+        processed_count += 1
+        
+        logger.info(f"Processing file {processed_count}/{total_objects}: {file_name}")
+        
+        try:
+            minio_response = minio_client.get_object(bucket_name, file_name)
+            parquet_bytes_io = BytesIO(minio_response.read())
+            minio_response.close()
+            minio_response.release_conn()
+            logger.info(f"Downloaded {file_name} from MinIO.")
             
-            try:
-                minio_response = minio_client.get_object(bucket_name, obj.object_name)
-                parquet_bytes_io = BytesIO(minio_response.read())
-                minio_response.close()
-                minio_response.release_conn()
-                logger.info(f"Downloaded {obj.object_name} from MinIO.")
-                
-                df = pd.read_parquet(parquet_bytes_io)
-                
-                # Process each row to create a unique record ID
-                for index, row in df.iterrows():
-                    # Create a unique ID based on key COVID data attributes
-                    jurisdiction = str(row.get('jurisdiction_residence', row.get('JURISDICTION_RESIDENCE', '')))
-                    year = str(row.get('year', row.get('YEAR', '')))
-                    month = str(row.get('month', row.get('MONTH', '')))
-                    demographic_group = str(row.get('demographic_group', row.get('DEMOGRAPHIC_GROUP', '')))
-                    subgroup1 = str(row.get('subgroup1', row.get('SUBGROUP1', '')))
-                    subgroup2 = str(row.get('subgroup2', row.get('SUBGROUP2', '')))
-                    
-                    # Create deterministic ID that will be the same across different files
-                    covid_record_id = f"{jurisdiction}_{year}_{month}_{demographic_group}_{subgroup1}_{subgroup2}".replace(' ', '_').replace('/', '_')
-                    
-                    # Add the record ID to the dataframe
-                    df.at[index, 'COVID_RECORD_ID'] = covid_record_id
-                
-                # Add metadata columns to main dataframe
-                df['SOURCE_FILE'] = obj.object_name
-                df['LOAD_TIMESTAMP_UTC'] = datetime.now(timezone.utc)
-                
-                # Uppercase column names for Snowflake
-                df.columns = df.columns.str.upper()
-                
-                flattened_data.append(df)
-                logger.info(f"Added {len(df)} records from {obj.object_name} to flattened data")
-                
-            except S3Error as s3_err:
-                logger.error(f"MinIO error for {obj.object_name}: {s3_err}")
-            except Exception as e:
-                logger.error(f"An unexpected error occurred while processing {obj.object_name}: {e}")
-                import traceback
-                logger.error(f"Traceback: {traceback.format_exc()}")
-        else:
-            logger.info(f"Skipping non-parquet object: {obj.object_name}")
+            df = pd.read_parquet(parquet_bytes_io)
+            
+            # Add metadata columns
+            df['SOURCE_FILE'] = file_name
+            df['LOAD_TIMESTAMP_UTC'] = datetime.now(timezone.utc)
+            
+            # Uppercase column names for Snowflake
+            df.columns = df.columns.str.upper()
+            
+            flattened_data.append(df)
+            logger.info(f"Added {len(df)} records from {file_name} to flattened data")
+            
+        except S3Error as s3_err:
+            logger.error(f"MinIO error for {file_name}: {s3_err}")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred while processing {file_name}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+    
+    logger.info(f"Processing summary: {processed_count} files processed")
     
     # Combine flattened data
     if flattened_data:
         combined_df = pd.concat(flattened_data, ignore_index=True)
-        logger.info(f"Created flattened data DataFrame with {len(combined_df)} records before deduplication")
-        
-        # Deduplicate based on COVID_RECORD_ID, keeping the most recent record
-        if not combined_df.empty and 'COVID_RECORD_ID' in combined_df.columns:
-            # Sort by LOAD_TIMESTAMP_UTC descending to keep the most recent
-            combined_df = combined_df.sort_values('LOAD_TIMESTAMP_UTC', ascending=False)
-            # Drop duplicates keeping first (most recent due to sort)
-            combined_df = combined_df.drop_duplicates(subset=['COVID_RECORD_ID'], keep='first')
-            logger.info(f"After deduplication: {len(combined_df)} unique records")
-        
+        logger.info(f"Created flattened data DataFrame with {len(combined_df)} total records from all files")
     else:
-        logger.warning("No flattened Parquet files found or processed")
+        logger.info("No parquet files found to process")
         combined_df = pd.DataFrame()
     
     return combined_df
     
 def upload_to_snowflake(conn, df, table_name, database, schema):
     """
-    Upload DataFrame to Snowflake table
+    Upload DataFrame to Snowflake table using overwrite mode (for raw data)
     """
     if df.empty:
         logger.warning(f"No data to upload to {table_name}")
@@ -205,7 +188,7 @@ def upload_to_snowflake(conn, df, table_name, database, schema):
             database=database,
             schema=schema,
             auto_create_table=True,
-            overwrite=True,
+            overwrite=True,  # Use overwrite mode for raw data
             quote_identifiers=True,
             use_logical_type=True
         )
@@ -275,19 +258,24 @@ def main():
         logger.info("Processing raw JSON files...")
         raw_df = process_raw_json_files(minio_client, MINIO_ZONING_BUCKET_NAME)
         
-        # Process flattened Parquet files
+        # Process flattened Parquet files (no SQL - just process all files)
         logger.info("Processing flattened Parquet files...")
-        flattened_df = process_flattened_parquet_files(minio_client, MINIO_ZONING_BUCKET_NAME)
+        flattened_df = process_flattened_parquet_files(
+            minio_client, 
+            MINIO_ZONING_BUCKET_NAME
+        )
         
-        # Upload raw data to Snowflake
+        # Upload raw data to Snowflake (using overwrite for raw data)
         if not raw_df.empty:
             logger.info(f"Uploading raw data to {RAW_TABLE_NAME}...")
             upload_to_snowflake(conn, raw_df, RAW_TABLE_NAME, SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA)
         
-        # Upload flattened data to Snowflake
+        # Upload flattened data to Snowflake (using overwrite to replace all data)
         if not flattened_df.empty:
-            logger.info(f"Uploading flattened data to {FLATTENED_TABLE_NAME}...")
+            logger.info(f"Uploading {len(flattened_df)} records to {FLATTENED_TABLE_NAME}...")
             upload_to_snowflake(conn, flattened_df, FLATTENED_TABLE_NAME, SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA)
+        else:
+            logger.info("No flattened files found to process")
         
         if raw_df.empty and flattened_df.empty:
             logger.warning("No data files found to process.")
@@ -309,4 +297,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    logger.info("COVID data staging process completed.")
