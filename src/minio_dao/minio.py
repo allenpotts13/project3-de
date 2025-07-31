@@ -5,6 +5,7 @@ from minio import Minio
 from minio.error import S3Error
 from dotenv import load_dotenv
 import logging
+from datetime import datetime, timezone
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ def extract_and_process_csv_from_minio(minio_client, filenames):
             df = normalize_column_names(df)
             
             # Add metadata columns
-            df['INGESTION_DATE'] = pd.Timestamp.now()
+            df['INGESTION_DATE'] = datetime.now(timezone.utc)
             df['FILENAME'] = filename
             
             # Create table name from filename (remove extension and sanitize)
