@@ -113,60 +113,53 @@ def process_raw_json_files(minio_client, bucket_name):
     
 def process_flattened_parquet_files(minio_client, bucket_name):
     """
-    Process all flattened Parquet files from MinIO and return DataFrame for flattened data table.
-    No SQL queries - just pulls all files and processes them.
+    Process only the latest flattened Parquet file from MinIO and return DataFrame for flattened data table.
     """
     flattened_data = []
-    
     objects_to_process = list(minio_client.list_objects(bucket_name, prefix='covid_data_flattened', recursive=True))
     parquet_objects = [obj for obj in objects_to_process if obj.object_name.endswith(".parquet")]
-    total_objects = len(parquet_objects)
-    processed_count = 0
-    
-    logger.info(f"Found {total_objects} parquet files to process")
-    
-    for obj in parquet_objects:
-        file_name = obj.object_name
-        processed_count += 1
-        
-        logger.info(f"Processing file {processed_count}/{total_objects}: {file_name}")
-        
-        try:
-            minio_response = minio_client.get_object(bucket_name, file_name)
-            parquet_bytes_io = BytesIO(minio_response.read())
-            minio_response.close()
-            minio_response.release_conn()
-            logger.info(f"Downloaded {file_name} from MinIO.")
-            
-            df = pd.read_parquet(parquet_bytes_io)
-            
-            # Add metadata columns
-            df['SOURCE_FILE'] = file_name
-            df['LOAD_TIMESTAMP_UTC'] = datetime.now(timezone.utc)
-            
-            # Uppercase column names for Snowflake
-            df.columns = df.columns.str.upper()
-            
-            flattened_data.append(df)
-            logger.info(f"Added {len(df)} records from {file_name} to flattened data")
-            
-        except S3Error as s3_err:
-            logger.error(f"MinIO error for {file_name}: {s3_err}")
-        except Exception as e:
-            logger.error(f"An unexpected error occurred while processing {file_name}: {e}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-    
-    logger.info(f"Processing summary: {processed_count} files processed")
-    
-    # Combine flattened data
+
+    if not parquet_objects:
+        logger.info("No parquet files found to process")
+        return pd.DataFrame()
+
+    # Find the latest parquet file by last_modified timestamp
+    latest_obj = max(parquet_objects, key=lambda x: x.last_modified)
+    file_name = latest_obj.object_name
+
+    logger.info(f"Processing latest parquet file: {file_name}")
+
+    try:
+        minio_response = minio_client.get_object(bucket_name, file_name)
+        parquet_bytes_io = BytesIO(minio_response.read())
+        minio_response.close()
+        minio_response.release_conn()
+        logger.info(f"Downloaded {file_name} from MinIO.")
+
+        df = pd.read_parquet(parquet_bytes_io)
+
+        # Add metadata columns
+        df['SOURCE_FILE'] = file_name
+        df['LOAD_TIMESTAMP_UTC'] = datetime.now(timezone.utc)
+
+        # Uppercase column names for Snowflake
+        df.columns = df.columns.str.upper()
+
+        flattened_data.append(df)
+        logger.info(f"Added {len(df)} records from {file_name} to flattened data")
+
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while processing {file_name}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+    # Combine flattened data (only one file in this case)
     if flattened_data:
         combined_df = pd.concat(flattened_data, ignore_index=True)
-        logger.info(f"Created flattened data DataFrame with {len(combined_df)} total records from all files")
+        logger.info(f"Created flattened data DataFrame with {len(combined_df)} total records from latest file")
     else:
-        logger.info("No parquet files found to process")
         combined_df = pd.DataFrame()
-    
+
     return combined_df
     
 def upload_to_snowflake(conn, df, table_name, database, schema):
@@ -272,6 +265,11 @@ def main():
         
         # Upload flattened data to Snowflake (using overwrite to replace all data)
         if not flattened_df.empty:
+            # Deduplicate based on business keys (excluding metadata columns)
+            business_columns = [col for col in flattened_df.columns if col not in ['SOURCE_FILE', 'LOAD_TIMESTAMP_UTC']]
+            initial_count = len(flattened_df)
+            flattened_df = flattened_df.drop_duplicates(subset=business_columns, keep='first')
+            logger.info(f"Deduplicated flattened data: {initial_count} → {len(flattened_df)} records")
             logger.info(f"Uploading {len(flattened_df)} records to {FLATTENED_TABLE_NAME}...")
             upload_to_snowflake(conn, flattened_df, FLATTENED_TABLE_NAME, SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA)
         else:
