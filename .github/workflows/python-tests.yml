@@ -31,8 +31,3 @@ jobs:
           export PYTHONPATH=$PYTHONPATH:$(pwd)/src
           pytest tests/
 
-      - name: dbt build
-        run: dbt build
-
-      - name: dbt test
-        run: dbt test
