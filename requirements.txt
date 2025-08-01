@@ -10,3 +10,4 @@ dotenv
 pandas
 minio
 pyarrow
+pytest
