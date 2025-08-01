@@ -14,6 +14,7 @@ load_dotenv()
 
 logger = setup_logger(__name__, "src/logs/us_covid_ingestion.log")
 
+
 def get_cdc_covid_data():
     ENDPOINT = os.getenv('US_COVID_ENDPOINT')
 
@@ -185,27 +186,29 @@ def save_to_parquet_and_upload(data, bucket_name):
                         }
                         processed_records.append(processed_record)
 
-
                 df = pd.DataFrame(processed_records)
-                logger.info(f"Extracted and flattened {len(df)} COVID records from API response")
+                logger.info(
+                    f"Extracted and flattened {len(df)} COVID records from API response")
 
             else:
                 logger.warning("No data rows found in API response")
                 df = pd.DataFrame()
-                
+
         elif isinstance(data, list):
             # If data is already a list, convert directly to DataFrame
             df = pd.json_normalize(data, sep='_')
-            logger.info(f"Converted list data to DataFrame with {len(df)} records")
+            logger.info(
+                f"Converted list data to DataFrame with {len(df)} records")
         else:
             df = pd.json_normalize(data, sep='_')
-            logger.info(f"Normalized entire data structure with {len(df)} records")
+            logger.info(
+                f"Normalized entire data structure with {len(df)} records")
 
         if not df.empty:
             # Add metadata columns
             df['extracted_at'] = datetime.now()
             df['source_api'] = 'data.cdc.gov/api/views/yrur-wghw/rows.json'
-            
+
             logger.info(
                 f"Final flattened DataFrame has {len(df)} records"
                 f" and {len(df.columns)} columns"
@@ -221,7 +224,7 @@ def save_to_parquet_and_upload(data, bucket_name):
             # Create BytesIO buffer for upload
             upload_buffer = BytesIO(parquet_bytes)
             file_size = len(parquet_bytes)
-            
+
             # Upload flattened Parquet to MinIO
             minio_client.put_object(
                 bucket_name,
@@ -259,7 +262,8 @@ def main():
             return False
 
         bucket_name = os.getenv('MINIO_BUCKET_NAME', 'project3-bronze')
-        success, raw_file, flattened_file = save_to_parquet_and_upload(data, bucket_name)
+        success, raw_file, flattened_file = save_to_parquet_and_upload(
+            data, bucket_name)
 
         if success:
             logger.info("CDC COVID data extraction completed successfully.")
@@ -267,12 +271,13 @@ def main():
         else:
             logger.error("Failed to save data to MinIO")
             return False
-    
+
     except Exception as e:
         logger.error(f"An error occurred in main: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         return False
+
 
 if __name__ == "__main__":
     success = main()
