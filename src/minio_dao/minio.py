@@ -4,11 +4,12 @@ from io import BytesIO
 from minio import Minio
 from minio.error import S3Error
 from dotenv import load_dotenv
-import logging
 from datetime import datetime, timezone
+from src.utils.logger import setup_logger
 
 load_dotenv()
-logger = logging.getLogger(__name__)
+
+logger = setup_logger(__name__, "src/logs/minio.log")
 
 def create_minio_client():
     """Create and return MinIO client"""

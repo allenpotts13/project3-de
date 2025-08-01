@@ -3,10 +3,11 @@ import pandas as pd
 import snowflake.connector
 from snowflake.connector.pandas_tools import write_pandas
 from dotenv import load_dotenv
-import logging
+from src.utils.logger import setup_logger
 
 load_dotenv()
-logger = logging.getLogger(__name__)
+
+logger = setup_logger(__name__, "src/logs/snowflake.log")
 
 def create_snowflake_connection():
     """Create and return Snowflake connection"""
