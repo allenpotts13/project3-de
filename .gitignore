@@ -227,16 +227,16 @@ dbt/covid_project/models/sources.yml
 #Docker container
 docker
 
-# Airflow
-airflow.db
-/.airflow.db
-**/.airflow.db
-.airflow.db
+# # Airflow
+# airflow.db
+# /.airflow.db
+# **/.airflow.db
+# .airflow.db
 
-airflow-webserver.pid
-/.airflow-webserver.pid
-**/.airflow-webserver.pid
-.airflow-webserver.pid
+# airflow-webserver.pid
+# /.airflow-webserver.pid
+# **/.airflow-webserver.pid
+# .airflow-webserver.pid
 
 
 

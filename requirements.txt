@@ -10,3 +10,5 @@ dotenv
 pandas
 minio
 pyarrow
+pytest
+flake8
