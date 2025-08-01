@@ -238,6 +238,8 @@ docker
 # **/.airflow-webserver.pid
 # .airflow-webserver.pid
 
+_devcontainer_setup.py
+
 
 
 
