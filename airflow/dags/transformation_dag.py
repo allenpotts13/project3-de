@@ -5,8 +5,8 @@ import os
 import subprocess
 from dotenv import load_dotenv
 
-DBT_PROJECT_DIR_IN_AIRFLOW = '/opt/airflow/dbt/my_dbt_project'
-DBT_PROFILES_DIR_IN_AIRFLOW = '/opt/airflow/dbt/my_dbt_project'
+DBT_PROJECT_DIR_IN_AIRFLOW = '/opt/airflow/my_covid_dbt_project'
+DBT_PROFILES_DIR_IN_AIRFLOW = '/opt/airflow/my_covid_dbt_project'
 
 load_dotenv()
 

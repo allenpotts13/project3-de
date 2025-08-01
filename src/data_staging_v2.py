@@ -1,7 +1,5 @@
 import os
-import logging
 import json
-import uuid
 from io import BytesIO
 from minio import Minio
 from minio.error import S3Error
@@ -10,30 +8,13 @@ from dotenv import load_dotenv
 from datetime import datetime, timezone
 import pandas as pd
 from snowflake.connector.pandas_tools import write_pandas
+from src.utils.logger import setup_logger
 
 load_dotenv()
 
-LOG_DIR = 'src/logs'
-LOG_FILE = os.path.join(LOG_DIR, 'data_staging.log')
-
-logger = logging.getLogger("data_staging")
-logger.setLevel(logging.INFO)
-
-file_handler = logging.FileHandler(LOG_FILE)
-file_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.INFO)
-stream_handler.setFormatter(formatter)
-logger.addHandler(stream_handler)
+logger = setup_logger(__name__, "src/logs/data_staging_v2.log")
 
 def get_env_var(name, required=True):
-    """
-    Get environment variable with optional requirement check.
-    """
     value = os.getenv(name)
     if required and not value:
         logger.error(f"Environment variable {name} is not set.")
@@ -41,9 +22,6 @@ def get_env_var(name, required=True):
     return value
 
 def process_raw_json_files(minio_client, bucket_name):
-    """
-    Process raw JSON files from MinIO and return DataFrame for raw data table
-    """
     raw_data = []
     objects_to_process = minio_client.list_objects(bucket_name, prefix='covid_data_raw', recursive=True)
     
@@ -112,9 +90,6 @@ def process_raw_json_files(minio_client, bucket_name):
         return pd.DataFrame()
     
 def process_flattened_parquet_files(minio_client, bucket_name):
-    """
-    Process only the latest flattened Parquet file from MinIO and return DataFrame for flattened data table.
-    """
     flattened_data = []
     objects_to_process = list(minio_client.list_objects(bucket_name, prefix='covid_data_flattened', recursive=True))
     parquet_objects = [obj for obj in objects_to_process if obj.object_name.endswith(".parquet")]
@@ -163,9 +138,6 @@ def process_flattened_parquet_files(minio_client, bucket_name):
     return combined_df
     
 def upload_to_snowflake(conn, df, table_name, database, schema):
-    """
-    Upload DataFrame to Snowflake table using overwrite mode (for raw data)
-    """
     if df.empty:
         logger.warning(f"No data to upload to {table_name}")
         return False
@@ -198,9 +170,6 @@ def upload_to_snowflake(conn, df, table_name, database, schema):
         return False
 
 def main():
-    """
-    Main entry point for the data staging process.
-    """
     logger.info("Starting COVID data staging process...")
 
     # Load environment variables
@@ -265,7 +234,6 @@ def main():
         
         # Upload flattened data to Snowflake (using overwrite to replace all data)
         if not flattened_df.empty:
-            # Deduplicate based on business keys (excluding metadata columns)
             business_columns = [col for col in flattened_df.columns if col not in ['SOURCE_FILE', 'LOAD_TIMESTAMP_UTC']]
             initial_count = len(flattened_df)
             flattened_df = flattened_df.drop_duplicates(subset=business_columns, keep='first')
@@ -277,15 +245,18 @@ def main():
         
         if raw_df.empty and flattened_df.empty:
             logger.warning("No data files found to process.")
+        return True
     
     except snowflake.connector.errors.ProgrammingError as e:
         logger.error(f"Snowflake SQL Error: {e.msg} (Code: {e.sfqid})")
         if hasattr(e, 'sql') and e.sql:
             logger.error(f"Failed SQL: {e.sql}")
+        return False
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
+        return False
     finally:
         if 'snowflake_cursor' in locals() and snowflake_cursor:
             snowflake_cursor.close()
