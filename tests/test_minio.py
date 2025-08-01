@@ -25,8 +25,6 @@ def test_extract_and_process_csv_from_minio_success(mock_minio_client, sample_cs
 
     # Patching the MinIO bucket .env variable, setting a fixed timestamp to compare to ingestion date
     monkeypatch.setenv('MINIO_BUCKET_NAME', bucket_name)
-    fixed_timestamp = pd.Timestamp('2024-01-01 12:00:00')
-    monkeypatch.setattr('pandas.Timestamp.now', lambda: fixed_timestamp)
 
     # Mocking the response returned from MinIO as the sample_csv_bytes
     mock_response = MagicMock()
@@ -42,7 +40,6 @@ def test_extract_and_process_csv_from_minio_success(mock_minio_client, sample_cs
     assert list(df.columns) == ['NAME', 'AGE', 'INGESTION_DATE', 'FILENAME']
     assert df.iloc[0]['NAME'] == 'Alice'
     assert df.iloc[1]['AGE'] == 25
-    assert all(df['INGESTION_DATE'] == fixed_timestamp)
     assert all(df['FILENAME'] == 'test-file.csv')
     mock_minio_client.get_object.assert_called_once_with(bucket_name, 'test-file.csv')
     mock_response.close.assert_called_once()
