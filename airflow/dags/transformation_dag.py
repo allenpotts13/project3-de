@@ -5,10 +5,11 @@ import os
 import subprocess
 from dotenv import load_dotenv
 
-DBT_PROJECT_DIR_IN_AIRFLOW = '/opt/airflow/my_covid_dbt_project'
-DBT_PROFILES_DIR_IN_AIRFLOW = '/opt/airflow/my_covid_dbt_project'
+DBT_PROJECT_DIR_IN_AIRFLOW = '/opt/airflow/dbt/covid_project'
+DBT_PROFILES_DIR_IN_AIRFLOW = '/opt/airflow/dbt/covid_project'
 
 load_dotenv()
+
 
 def run_dbt_command(dbt_command: str, **kwargs):
     dbt_env = os.environ.copy()
@@ -38,11 +39,13 @@ def run_dbt_command(dbt_command: str, **kwargs):
         print(f"Error running dbt command: {full_command}")
         print(f"stdout:\n{process.stdout}")
         print(f"stderr:\n{process.stderr}")
-        raise Exception(f"DBT command failed with return code {process.returncode}")
+        raise Exception(
+            f"DBT command failed with return code {process.returncode}")
     else:
         print(f"DBT command succeeded: {full_command}")
         print(f"stdout:\n{process.stdout}")
         print(f"stderr:\n{process.stderr}")
+
 
 with DAG(
     dag_id='covid_transformation_pipeline',
